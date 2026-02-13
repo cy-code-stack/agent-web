@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(find \"e:\"\" -type f -name \"*marrea* \")",
+      "Bash(where:*)",
+      "Bash(npm install:*)",
+      "Bash(md-to-pdf:*)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(tree:*)",
+      "Bash(move:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx next build:*)",
+      "Bash(powershell:*)"
+    ]
+  }
+}
