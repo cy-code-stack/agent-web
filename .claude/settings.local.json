@@ -14,7 +14,17 @@
       "Bash(npx tsc:*)",
       "Bash(npx next build:*)",
       "Bash(powershell:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(php --version)",
+      "Bash(composer --version)",
+      "Bash(composer create-project *)",
+      "Bash(composer require *)",
+      "Bash(php artisan *)",
+      "Bash(xargs php *)",
+      "Bash(cp \"c:/Users/Cymon John/Herd/agent_interface/frontend/src/lib/utils/\"*.ts \"c:/Users/Cymon John/Herd/agent_interface/backend/resources/js/lib/utils/\")",
+      "Bash(cp \"c:/Users/Cymon John/Herd/agent_interface/frontend/src/lib/hooks/\"*.ts \"c:/Users/Cymon John/Herd/agent_interface/backend/resources/js/lib/hooks/\")",
+      "Bash(composer update *)",
+      "Bash(xargs head *)"
     ]
   }
 }

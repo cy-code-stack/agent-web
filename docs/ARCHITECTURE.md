@@ -42,11 +42,11 @@ The Agent Interface is a web application designed for real estate agents to mana
               │                                       │
               ▼                                       ▼
 ┌─────────────────────────────┐         ┌─────────────────────────────┐
-│      FRONTEND (Next.js)     │         │      BACKEND (Go API)       │
+│      FRONTEND (Next.js)     │         │   BACKEND (Laravel API)     │
 │                             │         │                             │
 │  - Server-Side Rendering    │ ◄─────► │  - RESTful API              │
 │  - Static Generation        │   API   │  - Business Logic           │
-│  - React Components         │         │  - Authentication           │
+│  - React Components         │         │  - Sanctum Authentication   │
 │  - Client State Management  │         │  - Authorization            │
 └─────────────────────────────┘         └──────────────┬──────────────┘
                                                        │
@@ -63,31 +63,33 @@ The Agent Interface is a web application designed for real estate agents to mana
 
 ## 2. Technology Stack
 
-### Backend: Go (Golang)
+### Backend: Laravel 11 (PHP 8.3)
 
-**Justification for Go over Node.js:**
+**Justification for Laravel:**
 
-| Criteria                 | Go                               | Node.js                    |
-| ------------------------ | -------------------------------- | -------------------------- |
-| **Memory Footprint**     | ~10-20MB per instance            | ~50-100MB per instance     |
-| **Concurrency Model**    | Goroutines (2KB stack)           | Event loop + async/await   |
-| **10K Concurrent Users** | Single instance sufficient       | Multiple instances needed  |
-| **Type Safety**          | Compile-time static typing       | Runtime (TypeScript helps) |
-| **Deployment**           | Single binary, zero dependencies | Requires Node.js runtime   |
-| **CPU-Bound Tasks**      | Excellent                        | Poor (single-threaded)     |
-| **Startup Time**         | Milliseconds                     | Seconds                    |
+| Criteria                  | Laravel                                    |
+| ------------------------- | ------------------------------------------ |
+| **Developer Velocity**    | High — Artisan, Eloquent, auto-wiring      |
+| **Auth**                  | Sanctum (Bearer tokens) out of the box     |
+| **ORM**                   | Eloquent — maps directly to `re_` tables   |
+| **Queue / Jobs**          | Built-in — Redis-backed async processing   |
+| **Validation**            | Form Requests with declarative rules       |
+| **DDD Support**           | Clean via Actions + Service + Repository   |
+| **Ecosystem**             | Spatie packages, Horizon, Telescope        |
+| **Deployment**            | Laravel Forge / Ploi — one-click PHP hosts |
 
-**Go Library Stack:**
+**Laravel Package Stack:**
 
-| Purpose           | Library                     | Rationale                                           |
-| ----------------- | --------------------------- | --------------------------------------------------- |
-| Web Framework     | **Gin**                     | High performance, middleware support, battle-tested |
-| ORM               | **GORM**                    | Feature-rich, MySQL support, migrations             |
-| Validation        | **go-playground/validator** | Struct tag validation, custom rules                 |
-| JWT               | **golang-jwt/jwt**          | Standard JWT implementation                         |
-| Configuration     | **Viper**                   | Multi-format config, env variables                  |
-| Logging           | **Zap**                     | High-performance structured logging                 |
-| API Documentation | **Swaggo**                  | Auto-generate OpenAPI from annotations              |
+| Purpose              | Package                           | Rationale                                          |
+| -------------------- | --------------------------------- | -------------------------------------------------- |
+| Auth                 | **laravel/sanctum**               | Stateless Bearer token auth, token refresh         |
+| Roles & Permissions  | **spatie/laravel-permission**     | Role-based access control per agent/manager        |
+| API Filtering        | **spatie/laravel-query-builder**  | Filterable, sortable, includable APIs              |
+| DTOs & Validation    | **spatie/laravel-data**           | Typed data objects with auto-validation            |
+| Single-Action Classes| **lorisleiva/laravel-actions**    | One class per use case (maps directly to UC-xxx)   |
+| Performance          | **laravel/octane** (Swoole)       | Persistent process — eliminates PHP bootstrap cost |
+| API Documentation    | **dedoc/scramble**                | Auto-generate OpenAPI from code, zero annotations  |
+| Queue Monitoring     | **laravel/horizon**               | Real-time Redis queue dashboard                    |
 
 ### Frontend: Next.js 14+
 
@@ -428,41 +430,40 @@ The system is divided into 8 bounded contexts, each with clear boundaries and re
 | **Appointment** | UC-502   | List Appointments         |
 | **Appointment** | UC-503   | Update Appointment Status |
 
-### Application Service Pattern (Go)
+### Application Service Pattern (Laravel — Single-Action Class per Use Case)
 
-```go
-// internal/application/client/service.go
-type ClientApplicationService struct {
-    buyerRepo      domain.BuyerRepository
-    agentBuyerRepo domain.AgentBuyerRepository
-    cache          cache.CacheService
-    logger         *zap.Logger
-}
+```php
+// app/Application/Client/ListAgentClients.php
+namespace App\Application\Client;
 
-type ListClientsInput struct {
-    AgentID   int64
-    Page      int
-    PerPage   int
-    Search    string
-    SortBy    string
-    SortOrder string
-}
+use App\Domain\Client\Contracts\BuyerRepository;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Cache;
 
-type ListClientsOutput struct {
-    Clients    []ClientSummaryDTO
-    Total      int64
-    Page       int
-    PerPage    int
-    TotalPages int
-}
+class ListAgentClients
+{
+    public function __construct(
+        private readonly BuyerRepository $buyerRepo,
+    ) {}
 
-func (s *ClientApplicationService) ListClients(ctx context.Context, input ListClientsInput) (*ListClientsOutput, error) {
-    // 1. Validate input
-    // 2. Check cache
-    // 3. Query repository
-    // 4. Map to DTOs
-    // 5. Cache result
-    // 6. Return output
+    public function handle(int $agentId, array $filters): LengthAwarePaginator
+    {
+        $cacheKey = "agent:{$agentId}:clients:" . md5(serialize($filters));
+
+        // 1. Check Redis cache (5-min TTL, tagged for easy invalidation)
+        return Cache::tags(["agent:{$agentId}", 'clients'])
+            ->remember($cacheKey, now()->addMinutes(5), function () use ($agentId, $filters) {
+                // 2. Query repository with filters
+                return $this->buyerRepo->findByAgent(
+                    agentId: $agentId,
+                    search:  $filters['search']     ?? null,
+                    perPage: $filters['per_page']   ?? 15,
+                    sortBy:  $filters['sort_by']    ?? 'created_at',
+                    order:   $filters['sort_order'] ?? 'desc',
+                );
+                // 3. Returns Eloquent paginator — mapped to BuyerResource in controller
+            });
+    }
 }
 ```
 
@@ -470,36 +471,57 @@ func (s *ClientApplicationService) ListClients(ctx context.Context, input ListCl
 
 ## 6. Infrastructure Layer
 
-### Repository Pattern
+### Repository Pattern (Laravel — Interface + Eloquent Implementation)
 
-```go
-// internal/domain/agent/repository.go
-type AgentRepository interface {
-    FindByID(ctx context.Context, id AgentID) (*Agent, error)
-    FindByUserID(ctx context.Context, userID UserID) (*Agent, error)
-    FindByReferralCode(ctx context.Context, code ReferralCode) (*Agent, error)
-    Save(ctx context.Context, agent *Agent) error
-    Update(ctx context.Context, agent *Agent) error
+```php
+// app/Domain/Agent/Contracts/AgentRepository.php
+namespace App\Domain\Agent\Contracts;
+
+interface AgentRepository
+{
+    public function findById(int $id): ?AgentModel;
+    public function findByUserId(int $userId): ?AgentModel;
+    public function findByReferralCode(string $code): ?AgentModel;
+    public function save(AgentModel $agent): AgentModel;
+    public function update(int $id, array $data): AgentModel;
 }
 
-// internal/infrastructure/persistence/mysql/agent_repository.go
-type MySQLAgentRepository struct {
-    db *sqlx.DB
+// app/Infrastructure/Persistence/Repositories/EloquentAgentRepository.php
+namespace App\Infrastructure\Persistence\Repositories;
+
+use App\Domain\Agent\Contracts\AgentRepository;
+use App\Infrastructure\Persistence\Eloquent\AgentModel;
+
+class EloquentAgentRepository implements AgentRepository
+{
+    public function findById(int $id): ?AgentModel
+    {
+        return AgentModel::with(['user', 'realty'])
+            ->where('id', $id)
+            ->first();
+    }
+
+    public function findByReferralCode(string $code): ?AgentModel
+    {
+        return AgentModel::where('referral_code', $code)->first();
+    }
 }
 
-func (r *MySQLAgentRepository) FindByID(ctx context.Context, id domain.AgentID) (*domain.Agent, error) {
-    query := `
-        SELECT id, user_id, realty_id, realty_manager_id, referral_code,
-               appointment_ref_code, first_name, last_name, middle_name,
-               gender, contact_number, home_address, is_institution,
-               pag_ibig_id, tin, agent_country, agent_region, agent_province,
-               agent_city_mul, agent_brgy, agent_unit, building_name,
-               house_no, agent_street, agent_subdivision, agent_zip_code,
-               agent_landline, agent_phone_num, created_at, updated_at
-        FROM re_agents
-        WHERE id = ? AND deleted_at IS NULL
-    `
-    // Execute and map to domain entity
+// app/Infrastructure/Persistence/Eloquent/AgentModel.php  (maps to re_agents)
+class AgentModel extends Model
+{
+    use SoftDeletes;
+    protected $table = 're_agents';   // existing table — no migration needed
+    protected $fillable = [
+        'user_id', 'realty_id', 'realty_manager_id',
+        'referral_code', 'appointment_ref_code',
+        'first_name', 'last_name', 'middle_name', 'gender',
+        'contact_number', 'agent_phone_num', 'agent_landline',
+        'agent_country', 'agent_region', 'agent_province',
+        'agent_city_mul', 'agent_brgy', 'agent_street',
+        'agent_zip_code', 'is_institution', 'pag_ibig_id', 'tin',
+    ];
+    protected $casts = ['is_institution' => 'boolean'];
 }
 ```
 
@@ -516,130 +538,140 @@ func (r *MySQLAgentRepository) FindByID(ctx context.Context, id domain.AgentID) 
 
 ## 7. Module Breakdown
 
-### Backend Directory Structure (Go)
+### Backend Directory Structure (Laravel 11)
 
 ```
 backend/
-├── cmd/
-│   └── api/
-│       └── main.go                      # Application entry point
+├── app/
+│   ├── Domain/                          # DOMAIN LAYER (pure PHP — no Laravel deps)
+│   │   ├── Agent/
+│   │   │   ├── Contracts/
+│   │   │   │   └── AgentRepository.php  # Repository interface
+│   │   │   ├── ValueObjects/
+│   │   │   │   ├── ReferralCode.php
+│   │   │   │   ├── PersonalInfo.php
+│   │   │   │   ├── Address.php
+│   │   │   │   └── ContactInfo.php
+│   │   │   └── Services/
+│   │   │       ├── ReferralCodeService.php
+│   │   │       └── AppointmentRefCodeService.php
+│   │   ├── Client/
+│   │   │   ├── Contracts/
+│   │   │   │   └── BuyerRepository.php
+│   │   │   └── Services/
+│   │   ├── Sales/
+│   │   │   ├── Contracts/
+│   │   │   └── Services/
+│   │   │       ├── PricingCalculationService.php
+│   │   │       └── SaleStatusTransitionService.php
+│   │   ├── Incentive/
+│   │   │   ├── Contracts/
+│   │   │   └── Services/
+│   │   │       ├── IncentiveCalculationService.php
+│   │   │       └── IncentiveApprovalService.php
+│   │   ├── Appointment/
+│   │   │   └── Contracts/
+│   │   ├── Property/
+│   │   │   └── Contracts/
+│   │   ├── Organization/
+│   │   │   └── Contracts/
+│   │   └── Shared/
+│   │       ├── Money.php                # Money value object
+│   │       ├── Address.php              # Shared address VO
+│   │       └── DomainEvent.php          # Base domain event
+│   │
+│   ├── Application/                     # APPLICATION LAYER (use cases = Actions)
+│   │   ├── Auth/
+│   │   │   ├── LoginAgent.php           # UC-002
+│   │   │   ├── RefreshToken.php         # UC-003
+│   │   │   └── LogoutAgent.php          # UC-005
+│   │   ├── Agent/
+│   │   │   ├── GetAgentProfile.php      # UC-101
+│   │   │   ├── UpdateAgentProfile.php   # UC-102
+│   │   │   ├── GenerateReferralLink.php # UC-103
+│   │   │   ├── GenerateAppointmentLink.php # UC-104
+│   │   │   └── GetDashboardStats.php    # UC-105
+│   │   ├── Client/
+│   │   │   ├── ListAgentClients.php     # UC-201
+│   │   │   ├── GetClientDetails.php     # UC-202
+│   │   │   ├── AddNewClient.php         # UC-203
+│   │   │   ├── UpdateClientInfo.php     # UC-204
+│   │   │   └── ExportClientList.php     # UC-206
+│   │   ├── Sales/
+│   │   │   ├── ListAgentSales.php       # UC-301
+│   │   │   └── GetSaleDetails.php       # UC-302
+│   │   ├── Incentive/
+│   │   │   ├── ListAgentIncentives.php  # UC-401
+│   │   │   └── GetIncentiveDetails.php  # UC-402
+│   │   └── Appointment/
+│   │       ├── ScheduleSiteTour.php     # UC-501
+│   │       ├── ListAppointments.php     # UC-502
+│   │       └── UpdateAppointmentStatus.php # UC-503
+│   │
+│   ├── Infrastructure/                  # INFRASTRUCTURE LAYER (Laravel implementations)
+│   │   ├── Persistence/
+│   │   │   ├── Eloquent/
+│   │   │   │   ├── AgentModel.php       # re_agents table
+│   │   │   │   ├── BuyerModel.php       # re_buyers table
+│   │   │   │   ├── SaleModel.php        # re_sales table
+│   │   │   │   ├── IncentiveModel.php   # re_agent_incentives table
+│   │   │   │   ├── AppointmentModel.php # re_site_tour_appointments table
+│   │   │   │   ├── ProjectModel.php     # re_projects table
+│   │   │   │   └── UserModel.php        # users table
+│   │   │   └── Repositories/
+│   │   │       ├── EloquentAgentRepository.php
+│   │   │       ├── EloquentBuyerRepository.php
+│   │   │       ├── EloquentSaleRepository.php
+│   │   │       └── EloquentIncentiveRepository.php
+│   │   └── External/
+│   │       ├── SemaphoreSmsService.php  # Philippine SMS
+│   │       ├── MailNotificationService.php
+│   │       └── S3FileStorageService.php
+│   │
+│   ├── Http/                            # INTERFACE LAYER (Laravel HTTP)
+│   │   ├── Controllers/
+│   │   │   └── Api/V1/
+│   │   │       ├── AuthController.php
+│   │   │       ├── AgentController.php
+│   │   │       ├── ClientController.php
+│   │   │       ├── SalesController.php
+│   │   │       ├── IncentiveController.php
+│   │   │       └── AppointmentController.php
+│   │   ├── Requests/                    # Form Request validation
+│   │   │   ├── Auth/LoginRequest.php
+│   │   │   ├── Agent/UpdateAgentRequest.php
+│   │   │   ├── Client/StoreClientRequest.php
+│   │   │   └── Appointment/StoreAppointmentRequest.php
+│   │   ├── Resources/                   # API response transformers
+│   │   │   ├── AgentResource.php
+│   │   │   ├── BuyerResource.php
+│   │   │   ├── BuyerCollection.php
+│   │   │   ├── SaleResource.php
+│   │   │   ├── IncentiveResource.php
+│   │   │   └── AppointmentResource.php
+│   │   └── Middleware/
+│   │       ├── ForceJsonResponse.php
+│   │       └── EnsureAgentOwnership.php
+│   │
+│   └── Providers/
+│       ├── AppServiceProvider.php
+│       └── DomainServiceProvider.php    # Bind interfaces → implementations
 │
-├── internal/
-│   ├── domain/                          # DOMAIN LAYER
-│   │   ├── agent/
-│   │   │   ├── entity.go                # Agent aggregate
-│   │   │   ├── value_objects.go         # PersonalInfo, Address, etc.
-│   │   │   ├── repository.go            # Repository interface
-│   │   │   └── service.go               # Domain services
-│   │   ├── client/
-│   │   │   ├── entity.go                # Buyer aggregate
-│   │   │   ├── value_objects.go
-│   │   │   └── repository.go
-│   │   ├── sales/
-│   │   │   ├── entity.go
-│   │   │   ├── value_objects.go
-│   │   │   ├── repository.go
-│   │   │   └── service.go
-│   │   ├── incentive/
-│   │   │   ├── entity.go
-│   │   │   ├── value_objects.go
-│   │   │   ├── repository.go
-│   │   │   └── service.go
-│   │   ├── appointment/
-│   │   │   ├── entity.go
-│   │   │   ├── value_objects.go
-│   │   │   └── repository.go
-│   │   ├── property/
-│   │   │   ├── entity.go
-│   │   │   ├── value_objects.go
-│   │   │   └── repository.go
-│   │   ├── organization/
-│   │   │   ├── entity.go
-│   │   │   ├── value_objects.go
-│   │   │   └── repository.go
-│   │   └── shared/
-│   │       ├── money.go                 # Money value object
-│   │       ├── address.go               # Shared address VO
-│   │       └── events.go                # Domain events
-│   │
-│   ├── application/                     # APPLICATION LAYER
-│   │   ├── agent/
-│   │   │   ├── service.go
-│   │   │   ├── dto.go
-│   │   │   └── mapper.go
-│   │   ├── client/
-│   │   │   ├── service.go
-│   │   │   ├── dto.go
-│   │   │   └── mapper.go
-│   │   ├── sales/
-│   │   │   └── ...
-│   │   ├── incentive/
-│   │   │   └── ...
-│   │   ├── appointment/
-│   │   │   └── ...
-│   │   ├── property/
-│   │   │   └── ...
-│   │   └── auth/
-│   │       ├── service.go
-│   │       └── dto.go
-│   │
-│   ├── infrastructure/                  # INFRASTRUCTURE LAYER
-│   │   ├── persistence/
-│   │   │   └── mysql/
-│   │   │       ├── config.go
-│   │   │       ├── agent_repository.go
-│   │   │       ├── client_repository.go
-│   │   │       ├── sales_repository.go
-│   │   │       └── ...
-│   │   ├── cache/
-│   │   │   ├── redis.go
-│   │   │   ├── cache_service.go
-│   │   │   └── keys.go
-│   │   ├── auth/
-│   │   │   ├── jwt_service.go
-│   │   │   └── password_service.go
-│   │   ├── external/
-│   │   │   ├── notification_service.go
-│   │   │   ├── sms_service.go
-│   │   │   ├── email_service.go
-│   │   │   └── file_storage_service.go
-│   │   └── middleware/
-│   │       ├── auth.go
-│   │       ├── rate_limiter.go
-│   │       ├── cors.go
-│   │       ├── logging.go
-│   │       └── recovery.go
-│   │
-│   └── interfaces/                      # INTERFACE LAYER
-│       └── http/
-│           ├── router.go
-│           ├── handlers/
-│           │   ├── auth_handler.go
-│           │   ├── agent_handler.go
-│           │   ├── client_handler.go
-│           │   └── ...
-│           ├── requests/
-│           │   └── ...
-│           └── responses/
-│               └── ...
-│
-├── pkg/                                 # Shared packages
-│   ├── validator/
-│   ├── logger/
-│   └── errors/
+├── routes/
+│   └── api.php                          # All /api/v1/* routes
 │
 ├── config/
-│   ├── config.go
-│   └── config.yaml
+│   ├── sanctum.php
+│   ├── cors.php
+│   └── queue.php
 │
-├── docs/
-│   └── swagger/
+├── database/
+│   └── migrations/                      # Only for NEW tables; re_ tables unchanged
 │
 ├── Dockerfile
 ├── docker-compose.yml
-├── Makefile
-├── go.mod
-└── go.sum
+├── composer.json
+└── artisan
 ```
 
 ### Frontend Directory Structure (Next.js)
@@ -717,7 +749,7 @@ frontend/
 
 ```
 ┌──────────┐         ┌──────────────┐         ┌──────────┐         ┌─────────┐
-│  Client  │         │   Next.js    │         │  Go API  │         │  MySQL  │
+│  Client  │         │   Next.js    │         │  Laravel │         │  MySQL  │
 └────┬─────┘         └──────┬───────┘         └────┬─────┘         └────┬────┘
      │                      │                      │                    │
      │  1. Login Form       │                      │                    │
@@ -732,8 +764,8 @@ frontend/
      │                      │                      │  4. User Data      │
      │                      │                      │◄───────────────────│
      │                      │                      │                    │
-     │                      │                      │  5. Generate JWT   │
-     │                      │                      │  (Access+Refresh)  │
+     │                      │                      │  5. Sanctum Issue  │
+     │                      │                      │  Bearer Token pair │
      │                      │                      │                    │
      │                      │  6. JWT Tokens       │                    │
      │                      │◄─────────────────────│                    │
@@ -748,7 +780,7 @@ frontend/
 
 ```
 ┌──────────┐         ┌──────────────┐         ┌──────────┐    ┌───────┐    ┌─────────┐
-│  Client  │         │   Next.js    │         │  Go API  │    │ Redis │    │  MySQL  │
+│  Client  │         │   Next.js    │         │  Laravel │    │ Redis │    │  MySQL  │
 └────┬─────┘         └──────┬───────┘         └────┬─────┘    └───┬───┘    └────┬────┘
      │                      │                      │              │            │
      │  1. View Clients     │                      │              │            │
@@ -790,7 +822,7 @@ frontend/
 
 ```
 ┌──────────┐         ┌──────────────┐         ┌──────────┐         ┌─────────┐
-│  Client  │         │   Next.js    │         │  Go API  │         │  MySQL  │
+│  Client  │         │   Next.js    │         │  Laravel │         │  MySQL  │
 └────┬─────┘         └──────┬───────┘         └────┬─────┘         └────┬────┘
      │                      │                      │                    │
      │  1. Get Referral     │                      │                    │
@@ -827,10 +859,10 @@ frontend/
 
 This architecture document provides a comprehensive guide for implementing the Agent Interface system using:
 
-- **Go backend** with clean architecture and DDD principles
-- **Next.js frontend** with modern React patterns
-- **MySQL database** leveraging the existing marrea-local schema
-- **Redis caching** for performance optimization
+- **Laravel 11 backend** with clean architecture and DDD principles (Actions + Repository + Domain Services)
+- **Next.js 14+ frontend** with modern React patterns (App Router, TanStack Query, Zustand)
+- **MySQL database** leveraging the existing `marrea-local` schema with `re_` table prefix — no destructive migrations
+- **Redis** for caching (tagged cache invalidation) and queue backend (Horizon)
 
 The modular structure allows for:
 
