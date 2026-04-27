@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useForm, Head } from '@inertiajs/react';
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import AuthLayout from '@/Layouts/AuthLayout';
+import { cn } from '@/lib/utils';
 
 export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
@@ -21,92 +21,136 @@ export default function Login() {
         post('/login');
     };
 
+    const hasError = !!errors.email || !!errors.password;
+
     return (
         <AuthLayout>
-            <Head title="Login" />
-            <Card className="border-0 shadow-none sm:border sm:shadow-sm">
-                <CardHeader className="space-y-1 px-0 sm:px-6">
-                    <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-                    <CardDescription>Enter your credentials to access your account</CardDescription>
-                </CardHeader>
+            <Head title="Sign In" />
 
-                <form onSubmit={submit}>
-                    <CardContent className="space-y-4 px-0 sm:px-6">
-                        {errors.email && (
-                            <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                                {errors.email}
-                            </div>
-                        )}
+            <div className="space-y-8 animate-fade-in-up">
 
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
-                            <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="agent@example.com"
-                                    className="pl-10"
-                                    value={data.email}
-                                    onChange={(e) => setData('email', e.target.value)}
-                                    autoComplete="username"
-                                />
-                            </div>
+                {/* Heading */}
+                <div className="space-y-1.5">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                        Welcome back
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                        Sign in to your agent portal to continue
+                    </p>
+                </div>
+
+                {/* Error alert */}
+                {hasError && (
+                    <div className="flex items-start gap-3 p-3.5 rounded-xl border border-destructive/30 bg-destructive/5 animate-fade-in">
+                        <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                        <div className="text-sm text-destructive leading-snug">
+                            {errors.email || errors.password}
                         </div>
+                    </div>
+                )}
 
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
-                            <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    id="password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    placeholder="Enter your password"
-                                    className="pl-10 pr-10"
-                                    value={data.password}
-                                    onChange={(e) => setData('password', e.target.value)}
-                                    autoComplete="current-password"
-                                />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                >
-                                    {showPassword ? (
-                                        <EyeOff className="h-4 w-4 text-muted-foreground" />
-                                    ) : (
-                                        <Eye className="h-4 w-4 text-muted-foreground" />
-                                    )}
-                                </Button>
-                            </div>
-                        </div>
+                <form onSubmit={submit} className="space-y-5">
 
-                        <div className="flex items-center space-x-2">
-                            <Checkbox
-                                id="remember"
-                                checked={data.remember}
-                                onCheckedChange={(checked) => setData('remember', !!checked)}
+                    {/* Email field */}
+                    <div className="space-y-2">
+                        <Label htmlFor="email" className="text-sm font-semibold">
+                            Email address
+                        </Label>
+                        <div className="relative">
+                            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                            <Input
+                                id="email"
+                                type="email"
+                                placeholder="you@marrea.com"
+                                className={cn(
+                                    'pl-10 h-11 text-sm transition-all',
+                                    errors.email && 'border-destructive focus-visible:ring-destructive/30',
+                                )}
+                                value={data.email}
+                                onChange={(e) => setData('email', e.target.value)}
+                                autoComplete="username"
+                                autoFocus
+                                disabled={processing}
                             />
-                            <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
-                                Remember me
-                            </Label>
                         </div>
-                    </CardContent>
+                    </div>
 
-                    <CardFooter className="flex flex-col gap-4 px-0 sm:px-6">
-                        <Button type="submit" className="w-full" size="lg" disabled={processing}>
-                            {processing ? 'Signing in...' : 'Sign in'}
-                        </Button>
-                        <p className="text-sm text-center text-muted-foreground">
-                            Don&apos;t have an account?{' '}
-                            <span className="text-primary font-medium">Contact your administrator</span>
-                        </p>
-                    </CardFooter>
+                    {/* Password field */}
+                    <div className="space-y-2">
+                        <Label htmlFor="password" className="text-sm font-semibold">
+                            Password
+                        </Label>
+                        <div className="relative">
+                            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                            <Input
+                                id="password"
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="Enter your password"
+                                className={cn(
+                                    'pl-10 pr-11 h-11 text-sm transition-all',
+                                    errors.password && 'border-destructive focus-visible:ring-destructive/30',
+                                )}
+                                value={data.password}
+                                onChange={(e) => setData('password', e.target.value)}
+                                autoComplete="current-password"
+                                disabled={processing}
+                            />
+                            <button
+                                type="button"
+                                className="absolute right-0 top-0 h-full px-3.5 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                                onClick={() => setShowPassword(!showPassword)}
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                tabIndex={-1}
+                            >
+                                {showPassword
+                                    ? <EyeOff className="h-4 w-4" />
+                                    : <Eye className="h-4 w-4" />
+                                }
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Remember me */}
+                    <div className="flex items-center gap-2.5">
+                        <Checkbox
+                            id="remember"
+                            checked={data.remember}
+                            onCheckedChange={(checked) => setData('remember', !!checked)}
+                            disabled={processing}
+                        />
+                        <Label htmlFor="remember" className="text-sm font-normal cursor-pointer text-muted-foreground select-none">
+                            Keep me signed in for 30 days
+                        </Label>
+                    </div>
+
+                    {/* Submit button */}
+                    <Button
+                        type="submit"
+                        className="w-full h-11 text-sm font-semibold gap-2"
+                        disabled={processing}
+                    >
+                        {processing ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Signing in…
+                            </>
+                        ) : (
+                            'Sign in to Portal'
+                        )}
+                    </Button>
                 </form>
-            </Card>
+
+                {/* Footer note */}
+                <div className="pt-2 border-t border-border/50">
+                    <p className="text-xs text-center text-muted-foreground leading-relaxed">
+                        Don&apos;t have an account?{' '}
+                        <span className="font-semibold text-foreground">
+                            Contact your administrator
+                        </span>{' '}
+                        to get access.
+                    </p>
+                </div>
+            </div>
         </AuthLayout>
     );
 }

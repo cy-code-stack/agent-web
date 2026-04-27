@@ -41,6 +41,8 @@ export interface Agent {
     gender?: string;
     email: string;
     contact_number?: string;
+    agent_phone_num?: string;
+    agent_landline?: string;
     referral_code?: string;
     appointment_ref_code?: string;
     is_institution: boolean;

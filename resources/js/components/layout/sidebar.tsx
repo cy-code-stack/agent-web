@@ -1,21 +1,30 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     LayoutDashboard, Users, ShoppingCart, Wallet,
-    Calendar, ChevronLeft,
+    Calendar, ChevronLeft, LogOut, UserCog,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, generateInitials } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
 import { useSidebar } from '@/Layouts/AppLayout';
 import { SIDEBAR_NAV_ITEMS } from '@/lib/constants';
+import { router } from '@inertiajs/react';
+import type { PageProps } from '@/types';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     LayoutDashboard, Users, ShoppingCart, Wallet, Calendar,
 };
 
 export function Sidebar() {
-    const { url } = usePage();
+    const { url, props } = usePage<PageProps>();
+    const { auth } = props;
     const { isCollapsed, toggleCollapse } = useSidebar();
+
+    const user = auth.user;
+    const initials = user ? generateInitials(user.name, '') : 'AG';
+    const firstName = user?.name?.split(' ')[0] ?? 'Agent';
 
     return (
         <TooltipProvider delayDuration={0}>
@@ -68,6 +77,11 @@ export function Sidebar() {
 
                 {/* Navigation */}
                 <nav className="flex-1 overflow-y-auto py-4 px-2">
+                    {!isCollapsed && (
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40 px-3 mb-2">
+                            Navigation
+                        </p>
+                    )}
                     <ul className="space-y-1">
                         {SIDEBAR_NAV_ITEMS.map((item) => {
                             const Icon = iconMap[item.icon];
@@ -117,24 +131,86 @@ export function Sidebar() {
                     </ul>
                 </nav>
 
-                {/* Expand button (collapsed state) */}
-                {isCollapsed && (
-                    <div className="p-2 border-t border-sidebar-border">
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={toggleCollapse}
-                                    className="w-full h-10 text-sidebar-foreground hover:bg-sidebar-accent"
-                                >
-                                    <ChevronLeft className="h-4 w-4 rotate-180" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">Expand sidebar</TooltipContent>
-                        </Tooltip>
-                    </div>
-                )}
+                {/* Agent profile section */}
+                <div className="border-t border-sidebar-border">
+                    {isCollapsed ? (
+                        <div className="p-2 space-y-1">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Link href="/profile" className="flex items-center justify-center h-10 w-full rounded-lg hover:bg-sidebar-accent/50 transition-colors">
+                                        <Avatar className="h-8 w-8">
+                                            <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold">
+                                                {initials}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                    </Link>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="bg-sidebar text-sidebar-foreground border-sidebar-border">
+                                    <p className="font-semibold">{user?.name ?? 'Agent'}</p>
+                                    <p className="text-xs text-sidebar-foreground/60">{user?.email}</p>
+                                    <p className="text-xs text-sidebar-foreground/40 mt-0.5">View profile</p>
+                                </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={toggleCollapse}
+                                        className="w-full h-10 text-sidebar-foreground hover:bg-sidebar-accent"
+                                    >
+                                        <ChevronLeft className="h-4 w-4 rotate-180" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right">Expand sidebar</TooltipContent>
+                            </Tooltip>
+                        </div>
+                    ) : (
+                        <div className="p-3">
+                            <div className="flex items-center gap-3 p-2.5 rounded-xl bg-sidebar-accent/40 hover:bg-sidebar-accent/60 transition-colors">
+                                <Avatar className="h-9 w-9 flex-shrink-0">
+                                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-bold">
+                                        {initials}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-sidebar-foreground truncate leading-tight">
+                                        {firstName}
+                                    </p>
+                                    <p className="text-[11px] text-sidebar-foreground/50 truncate">
+                                        Sales Agent
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Link
+                                                href="/profile"
+                                                className="h-7 w-7 flex items-center justify-center text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-lg transition-colors"
+                                            >
+                                                <UserCog className="h-3.5 w-3.5" />
+                                            </Link>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">My Profile</TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => router.post('/logout')}
+                                                className="h-7 w-7 flex-shrink-0 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-lg"
+                                            >
+                                                <LogOut className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">Log out</TooltipContent>
+                                    </Tooltip>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </aside>
         </TooltipProvider>
     );

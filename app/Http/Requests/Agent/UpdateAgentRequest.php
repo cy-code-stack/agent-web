@@ -17,7 +17,7 @@ class UpdateAgentRequest extends FormRequest
             'first_name' => ['sometimes', 'string', 'max:100'],
             'last_name' => ['sometimes', 'string', 'max:100'],
             'middle_name' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'gender' => ['sometimes', 'nullable', 'in:male,female,other'],
+            'gender' => ['sometimes', 'nullable', 'in:male,female,prefer_not_to_say'],
             'contact_number' => ['sometimes', 'nullable', 'string', 'max:20'],
             'agent_phone_num' => ['sometimes', 'nullable', 'string', 'max:20'],
             'agent_landline' => ['sometimes', 'nullable', 'string', 'max:20'],

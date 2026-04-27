@@ -20,7 +20,7 @@ class GetDashboardStats
 
                 return [
                     'total_clients' => BuyerModel::where('agent_id', $agentId)->count(),
-                    'total_sales' => SaleModel::where('agent_id', $agentId)->count(),
+                    'total_contract_price' => SaleModel::where('agent_id', $agentId)->sum('total_contract_price'),
                     'pending_incentives' => IncentiveModel::where('agent_id', $agentId)
                         ->where('status', 'pending')->count(),
                     'total_incentive_amount' => IncentiveModel::where('agent_id', $agentId)
